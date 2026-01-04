@@ -69,57 +69,55 @@ def regex_fallback(text: str, pattern: str) -> Optional[str]:
     return match.group(1).strip() if match else None
 
 def parse_invoice_text(text: str) -> Dict[str, any]:
-    """
-    Parsea el texto crudo a dict con campos chilenos usando QA + regex fallback.
-    """
     fields = {}
     
-    # 1. Número y serie de la factura
-    question = "¿Cuál es el número de la factura?"
-    fields['numero_factura'] = extract_field_with_qa(text, question) or regex_fallback(text, r'(?:Factura|Nº|Número|Serie)\s*:\s*(\d+)')
+    # 1. Número factura (tolerar N*, Nº, espacios)
+    question = "¿Cuál es el número o Nº de la factura?"
+    fields['numero_factura'] = extract_field_with_qa(text, question) or regex_fallback(text, r'(?:Factura|Nº|N\*|Número|Serie)\s*[:\s]*(\d+)')
     
-    # 2. Fecha de emisión (regex actualizado para textual)
+    # 2. Fecha (ya maneja textual, pero agrega variaciones)
     question = "¿Cuál es la fecha de emisión?"
-    fecha_raw = extract_field_with_qa(text, question) or regex_fallback(text, r'(?:Fecha|Emisión)\s*:\s*(\d{1,2} (de )?[a-zA-Z]+ (de )?\d{4})')
-    fields['fecha_emision'] = normalize_date(fecha_raw) if fecha_raw else None  # Normaliza a DD-MM-YYYY
+    fecha_raw = extract_field_with_qa(text, question) or regex_fallback(text, r'(?:Fecha|Emisión)\s*[:\s]*(\d{1,2} (de )?[a-zA-Z]+ (de |del )?\d{4})')
+    fields['fecha_emision'] = normalize_date(fecha_raw) if fecha_raw else None
     
     # 3. Nombre emisor
-    question = "¿Cuál es el nombre o denominación del emisor?"
-    fields['nombre_emisor'] = extract_field_with_qa(text, question) or regex_fallback(text, r'(?:Emisor|De|Nombre emisor)\s*:\s*(.+?)(?=RUT|Domicilio)')
+    question = "¿Cuál es el nombre o denominación del emisor o empresa emisora?"
+    fields['nombre_emisor'] = extract_field_with_qa(text, question) or regex_fallback(text, r'(?:Emisor|De|Nombre emisor|SEÑOR\(ES\))\s*[:\s]*(.+?)(?=RUT|Domicilio|Giro)')
     
     # 4. Nombre destinatario
-    question = "¿Cuál es el nombre o denominación del destinatario?"
-    fields['nombre_destinatario'] = extract_field_with_qa(text, question) or regex_fallback(text, r'(?:Destinatario|Para|Nombre cliente)\s*:\s*(.+?)(?=RUT|Domicilio)')
+    question = "¿Cuál es el nombre o denominación del destinatario o cliente?"
+    fields['nombre_destinatario'] = extract_field_with_qa(text, question) or regex_fallback(text, r'(?:Destinatario|Para|SEÑOR\(ES\)|Nombre cliente)\s*[:\s]*(.+?)(?=RUT|Domicilio)')
     
-    # 5. RUT emisor
+    # 5. RUT emisor (tolerar espacios en RUT)
     question = "¿Cuál es el RUT del emisor?"
-    fields['rut_emisor'] = extract_field_with_qa(text, question) or regex_fallback(text, r'(?:RUT|Rut emisor)\s*:\s*(\d{1,2}\.\d{3}\.\d{3}-[\dKk])')
+    rut_raw = extract_field_with_qa(text, question) or regex_fallback(text, r'(?:RUT|Rut emisor)\s*[:\s]*(\d{1,2}\.?\d{3}\.?\d{3}-?[\dKk ])')
+    fields['rut_emisor'] = rut_raw.strip() if rut_raw else None  # Limpia espacios finales
     
     # 6. Domicilio emisor
-    question = "¿Cuál es el domicilio del emisor?"
-    fields['domicilio_emisor'] = extract_field_with_qa(text, question) or regex_fallback(text, r'(?:Domicilio emisor|Dirección emisor)\s*:\s*(.+?)(?=Destinatario|Factura)')
+    question = "¿Cuál es el domicilio o dirección del emisor?"
+    fields['domicilio_emisor'] = extract_field_with_qa(text, question) or regex_fallback(text, r'(?:Domicilio emisor|Dirección emisor|DOMICILIO|LAUTARO)\s*[:\s]*(.+?)(?=Destinatario|Factura|COMUNA)')
     
     # 7. Domicilio destinatario
-    question = "¿Cuál es el domicilio del destinatario?"
-    fields['domicilio_destinatario'] = extract_field_with_qa(text, question) or regex_fallback(text, r'(?:Domicilio destinatario|Dirección cliente)\s*:\s*(.+?)(?=Descrip|Operaciones)')
+    question = "¿Cuál es el domicilio o dirección del destinatario?"
+    fields['domicilio_destinatario'] = extract_field_with_qa(text, question) or regex_fallback(text, r'(?:Domicilio destinatario|Dirección|GRAN BRETANA)\s*[:\s]*(.+?)(?=COMUNA|CIUDAD|Descrip)')
     
-    # 8. Descripción operaciones
-    question = "¿Cuál es la descripción de las operaciones?"
-    fields['descripcion_operaciones'] = extract_field_with_qa(text, question) or regex_fallback(text, r'(?:Descrip|Operaciones|Detalle)\s*:\s*(.+?)(?=Neto|Monto)')
+    # 8. Descripción (captura bloques largos)
+    question = "¿Cuál es la descripción de las operaciones o detalle?"
+    fields['descripcion_operaciones'] = extract_field_with_qa(text, question) or regex_fallback(text, r'(?:Descrip|Operaciones|Detalle|Estado de Pago)\s*[:\s]*(.+?)(?=Referencias|Neto|Monto)', re.DOTALL)
     
-    # 9. Monto Neto
+    # 9. Monto Neto (tolerar puntos/comas, $)
     question = "¿Cuál es el monto neto?"
-    monto_neto_raw = extract_field_with_qa(text, question) or regex_fallback(text, r'(?:Neto|Monto neto)\s*:\s*\$?([\d.,]+)')
+    monto_neto_raw = extract_field_with_qa(text, question) or regex_fallback(text, r'(?:Neto|MONTO NETO)\s*[:\s]*\$?([\d.,]+)')
     fields['monto_neto'] = float(re.sub(r'[.,]', '', monto_neto_raw)) if monto_neto_raw else None
     
-    # 10. Tipo IVA
-    question = "¿Cuál es el tipo de IVA?"
-    iva_raw = extract_field_with_qa(text, question) or regex_fallback(text, r'(?:IVA|Iva tipo)\s*:\s*(\d+\.?\d*)%?')
+    # 10. IVA (captura 19% o valor)
+    question = "¿Cuál es el tipo o porcentaje de IVA?"
+    iva_raw = extract_field_with_qa(text, question) or regex_fallback(text, r'(?:IVA|I\.V\.A\.)\s*(\d+\.?\d*)%?')
     fields['iva_tipo'] = float(iva_raw.replace('%', '')) / 100 if iva_raw and '%' in iva_raw else (float(iva_raw) if iva_raw else None)
     
     # 11. Total
     question = "¿Cuál es el total?"
-    total_raw = extract_field_with_qa(text, question) or regex_fallback(text, r'(?:Total|Monto total)\s*:\s*\$?([\d.,]+)')
+    total_raw = extract_field_with_qa(text, question) or regex_fallback(text, r'(?:Total|TOTAL)\s*[:\s]*\$?([\d.,]+)')
     fields['total'] = float(re.sub(r'[.,]', '', total_raw)) if total_raw else None
     
     # Log resultados
@@ -133,17 +131,7 @@ def parse_invoice_text(text: str) -> Dict[str, any]:
 
 # Ejemplo de uso
 if __name__ == "__main__":
-    sample_text = """Factura Nº: 123
-    Fecha Emisión: 26 de julio de 2020
-    Emisor: Empresa Emisora SPA
-    RUT Emisor: 76.123.456-7
-    Domicilio Emisor: Av. Siempre Viva 123, Santiago
-    Destinatario: Cliente Destinatario Ltda
-    Domicilio Destinatario: Calle Falsa 456, Valparaíso
-    Descripción: Venta de productos electrónicos
-    Monto Neto: 100000
-    IVA: 19%
-    Total: 119000"""
-    
+    # Usa el texto revuelto del log como sample
+    sample_text = "R.U.T.:76.869.695- 0\nDEPROX SPA\n... "  # Pega el texto completo del log aquí
     parsed = parse_invoice_text(sample_text)
     print(parsed)

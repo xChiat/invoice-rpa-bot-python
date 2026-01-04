@@ -26,9 +26,25 @@ def process_invoice(pdf_path: str, previous_num: int = None) -> None:
         method = extracted['method']
         logger.info(f"Extracción completada vía {method} para {pdf_path}")
         
+        
+        print()
+        print("----------------")
+        print("Extracted Text:")
+        print("----------------")
+        print(text)
+        print()
+        
+       
         # Parsing con AI
         parsed_data = parse_invoice_text(text)
         logger.info(f"Datos parseados: {parsed_data}")
+        
+        print()
+        print("--------------")
+        print("Parsed Data:")
+        print("--------------")
+        print(parsed_data)
+        print()
         
         # Validación
         valid, errors = validate_invoice_data(parsed_data, previous_invoice_num=previous_num, iva_rate=IVA_RATE)
@@ -60,9 +76,3 @@ if __name__ == "__main__":
     # Ejecución manual para test
     sample_pdf = os.path.join(INPUT_FOLDER, "factura_1.pdf") 
     process_invoice(sample_pdf)
-    
-    # Automatización con scheduler (ejecuta cada 60s)
-    scheduler = BlockingScheduler()
-    scheduler.add_job(scan_and_process_folder, 'interval', seconds=60)
-    logger.info("Iniciando scheduler para procesamiento automático...")
-    scheduler.start()

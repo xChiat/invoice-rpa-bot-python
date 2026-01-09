@@ -13,7 +13,6 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 IVA_RATE = float(os.getenv("IVA_RATE", 0.19))
 INPUT_FOLDER = os.getenv("INPUT_FOLDER", "./data/input/")
-# TODO: Agrega más vars como DB_URL, EMAIL_SENDER, etc.
 
 def process_invoice(pdf_path: str, previous_num: int = None) -> None:
     """
@@ -50,13 +49,8 @@ def process_invoice(pdf_path: str, previous_num: int = None) -> None:
         valid, errors = validate_invoice_data(parsed_data, previous_invoice_num=previous_num, iva_rate=IVA_RATE)
         if valid:
             logger.info("Factura válida. Procede a procesamiento (BD, reporte, email).")
-            # TODO: Llama a processing.py, db.py, output.py aquí
-            # Ej. save_to_db(parsed_data)
-            # generate_report(parsed_data)
-            # send_email("Factura procesada exitosamente")
         else:
             logger.error(f"Factura inválida: {errors}")
-            # TODO: Manejo de errores (retry, alert)
     
     except Exception as e:
         logger.error(f"Error procesando {pdf_path}: {e}")
@@ -68,9 +62,7 @@ def scan_and_process_folder() -> None:
     for file in os.listdir(INPUT_FOLDER):
         if file.endswith(".pdf"):
             pdf_path = os.path.join(INPUT_FOLDER, file)
-            # TODO: Chequea si ya procesado (via BD)
-            process_invoice(pdf_path)  # Pasa previous_num de BD si existe
-            # TODO: Mueve a processed folder después
+            process_invoice(pdf_path)  
 
 if __name__ == "__main__":
     # Ejecución manual para test

@@ -8,15 +8,16 @@ from typing import List, Dict, Optional
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # Ajusta tu path
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 def preprocess_image(image: Image.Image) -> Image.Image:
-    """Preprocesa imagen para mejorar OCR: grayscale, contraste, binarizar."""
+    image = image.resize((int(image.width * 1.5), int(image.height * 1.5)))  # Upscale para mejor res
     image = image.convert('L')  # Grayscale
+    image = image.filter(ImageFilter.MedianFilter(size=3))  # Denoising
     enhancer = ImageEnhance.Contrast(image)
-    image = enhancer.enhance(2.0)  # Contraste x2
-    image = image.filter(ImageFilter.SHARPEN)  # Sharpen
-    image = image.point(lambda x: 0 if x < 140 else 255, '1')  # Binarizar (threshold 140)
+    image = enhancer.enhance(2.5)  # Aumenta contraste
+    image = image.filter(ImageFilter.SHARPEN)
+    image = image.point(lambda x: 0 if x < 150 else 255, '1')  # Threshold ajustado a 150 para facturas claras
     return image
 
 def extract_text_from_pdf(pdf_path: str) -> str:
@@ -44,8 +45,7 @@ def ocr_from_pdf(pdf_path: str, lang: str = 'spa') -> str:
             for page in pdf.pages:
                 page_image = page.to_image(resolution=300).original  # Alta res
                 processed_image = preprocess_image(page_image)
-                # OCR con config optimizada para facturas
-                page_text = pytesseract.image_to_string(processed_image, lang=lang, config='--psm 4 --oem 3')
+                page_text = pytesseract.image_to_string(processed_image, lang='spa', config='--oem 3 --psm 3 --dpi 300')
                 text += page_text + "\n"
         logger.info(f"OCR completado para {pdf_path} con preprocesamiento.")
         return text

@@ -52,7 +52,7 @@ def extract_field_with_qa(text: str, question: str) -> Optional[str]:
     try:
         result = qa_pipeline(question=question, context=text)
         answer = result['answer'].strip()
-        if result['score'] > 0.5:  # Umbral de confianza
+        if result['score'] > 0.3: 
             return answer
         else:
             logger.warning(f"Confianza baja ({result['score']}) para '{question}'.")
@@ -61,11 +61,11 @@ def extract_field_with_qa(text: str, question: str) -> Optional[str]:
         logger.error(f"Error en QA para '{question}': {e}")
         return None
 
-def regex_fallback(text: str, pattern: str) -> Optional[str]:
+def regex_fallback(text: str, pattern: str, flags: int = re.IGNORECASE) -> Optional[str]:
     """
-    Fallback con regex para patrones predecibles.
+    Fallback con regex, ahora soporta flags personalizados.
     """
-    match = re.search(pattern, text, re.IGNORECASE)
+    match = re.search(pattern, text, flags=flags)
     return match.group(1).strip() if match else None
 
 def parse_invoice_text(text: str) -> Dict[str, any]:
@@ -103,7 +103,7 @@ def parse_invoice_text(text: str) -> Dict[str, any]:
     
     # 8. Descripción (captura bloques largos)
     question = "¿Cuál es la descripción de las operaciones o detalle?"
-    fields['descripcion_operaciones'] = extract_field_with_qa(text, question) or regex_fallback(text, r'(?:Descrip|Operaciones|Detalle|Estado de Pago)\s*[:\s]*(.+?)(?=Referencias|Neto|Monto)', re.DOTALL)
+    fields['descripcion_operaciones'] = extract_field_with_qa(text, question) or regex_fallback(text, r'(?:Descrip|Operaciones|Detalle|Estado de Pago)\s*[:\s]*(.+?)(?=Referencias|Neto|Monto)', flags=re.IGNORECASE | re.DOTALL)
     
     # 9. Monto Neto (tolerar puntos/comas, $)
     question = "¿Cuál es el monto neto?"

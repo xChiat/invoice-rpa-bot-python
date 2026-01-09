@@ -20,10 +20,11 @@ def process_invoice(pdf_path: str, previous_num: int = None) -> None:
     """
     try:
         # Extracción
-        extracted = extract_invoice_data(pdf_path)
+        extracted = extract_invoice_data(pdf_path, use_advanced_ocr=True)
         text = extracted['text']
         method = extracted['method']
-        logger.info(f"Extracción completada vía {method} para {pdf_path}")
+        quality = extracted.get('quality', 0.0)
+        logger.info(f"Extracción completada vía {method} para {pdf_path} (calidad: {quality:.2%})")
         
         
         print()
@@ -66,5 +67,5 @@ def scan_and_process_folder() -> None:
 
 if __name__ == "__main__":
     # Ejecución manual para test
-    sample_pdf = os.path.join(INPUT_FOLDER, "factura_1.pdf") 
+    sample_pdf = os.path.join(INPUT_FOLDER, "factura_2.pdf") 
     process_invoice(sample_pdf)

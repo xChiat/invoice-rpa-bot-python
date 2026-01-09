@@ -1,6 +1,8 @@
 pdfplumber==0.11.4  # Para extracción de PDFs estructurados
 pytesseract==0.3.10  # Para OCR
 Pillow==10.4.0  # Requerido por pytesseract para imágenes
+opencv-python==4.10.1.26  # Para detección de regiones y preprocesamiento avanzado
+scikit-image==0.24.1  # Para operaciones morfológicas y análisis de imagen
 pandas==2.2.3  # Procesamiento de datos
 numpy==2.1.1  # Para cálculos
 sqlalchemy==2.0.35  # ORM para BD

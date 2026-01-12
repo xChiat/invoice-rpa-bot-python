@@ -177,3 +177,4 @@ pyrightconfig.json
 log.md
 
 # End of https://www.toptal.com/developers/gitignore/api/python
+/scanned-pdf-text-extractor

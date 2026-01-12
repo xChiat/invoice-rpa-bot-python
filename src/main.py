@@ -1,71 +1,52 @@
 import os
-import logging
-from dotenv import load_dotenv
-from apscheduler.schedulers.blocking import BlockingScheduler 
-from extraction import extract_invoice_data
-from ai_extraction import parse_invoice_text
-from validation import validate_invoice_data
+from pathlib import Path
+from extraction import extract_text_from_pdf
 
-# Configura logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
-load_dotenv()
-IVA_RATE = float(os.getenv("IVA_RATE", 0.19))
-INPUT_FOLDER = os.getenv("INPUT_FOLDER", "./data/input/")
-
-def process_invoice(pdf_path: str, previous_num: int = None) -> None:
+def main():
     """
-    Flujo principal: Extrae, parsea, valida una factura.
+    Función principal que procesa todos los PDFs en data/input/
     """
-    try:
-        # Extracción
-        extracted = extract_invoice_data(pdf_path, use_advanced_ocr=True)
-        text = extracted['text']
-        method = extracted['method']
-        quality = extracted.get('quality', 0.0)
-        logger.info(f"Extracción completada vía {method} para {pdf_path} (calidad: {quality:.2%})")
-        
-        
-        print()
-        print("----------------")
-        print("Extracted Text:")
-        print("----------------")
-        print(text)
-        print()
-        
-       
-        # Parsing con AI
-        parsed_data = parse_invoice_text(text)
-        logger.info(f"Datos parseados: {parsed_data}")
-        
-        print()
-        print("--------------")
-        print("Parsed Data:")
-        print("--------------")
-        print(parsed_data)
-        print()
-        
-        # Validación
-        valid, errors = validate_invoice_data(parsed_data, previous_invoice_num=previous_num, iva_rate=IVA_RATE)
-        if valid:
-            logger.info("Factura válida. Procede a procesamiento (BD, reporte, email).")
-        else:
-            logger.error(f"Factura inválida: {errors}")
+    # Configurar rutas
+    base_dir = Path(__file__).parent.parent  
+    input_dir = base_dir / "data" / "input"
+    output_dir = base_dir / "data" / "output"
     
-    except Exception as e:
-        logger.error(f"Error procesando {pdf_path}: {e}")
+    # Crear directorio de salida si no existe
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Verificar que el directorio de entrada existe
+    if not input_dir.exists():
+        print(f"Error: El directorio {input_dir} no existe")
+        return
+    
+    # Obtener lista de archivos PDF en el directorio de entrada
+    pdf_files = list(input_dir.glob("*.pdf"))
+    
+    if not pdf_files:
+        print(f"No se encontraron archivos PDF en {input_dir}")
+        return
+    
+    print(f"Se encontraron {len(pdf_files)} archivo(s) PDF\n")
+    
+    # Procesar cada PDF
+    for pdf_path in pdf_files:
+        print("=" * 80)
+        print(f"Procesando: {pdf_path.name}")
+        print("=" * 80)
+        
+        try:
+            # Extraer texto del PDF
+            extracted_text = extract_text_from_pdf(str(pdf_path))
+            
+            # Mostrar el texto en la terminal
+            print("\n--- TEXTO EXTRAÍDO ---\n")
+            print(extracted_text)
+            print("\n" + "=" * 80 + "\n")
+            
+        except Exception as e:
+            print(f"✗ Error al procesar {pdf_path.name}: {e}\n")
 
-def scan_and_process_folder() -> None:
-    """
-    Escanea carpeta input y procesa PDFs nuevos.
-    """
-    for file in os.listdir(INPUT_FOLDER):
-        if file.endswith(".pdf"):
-            pdf_path = os.path.join(INPUT_FOLDER, file)
-            process_invoice(pdf_path)  
 
 if __name__ == "__main__":
-    # Ejecución manual para test
-    sample_pdf = os.path.join(INPUT_FOLDER, "factura_2.pdf") 
-    process_invoice(sample_pdf)
+    main()

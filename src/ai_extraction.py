@@ -1,7 +1,8 @@
 import os
 import re
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import date
+from factura import Factura
 
 load_dotenv()
 HF_TOKEN = os.getenv("HUGGINGFACE_TOKEN")
@@ -49,8 +50,8 @@ class FacturaExtractor:
                 ruts_unicos.append(rut)
         
         return {
-            'emisor': ruts_unicos[0] if len(ruts_unicos) > 0 else None,
-            'destinatario': ruts_unicos[1] if len(ruts_unicos) > 1 else None,
+            'emisor': ruts_unicos[0] if len(ruts_unicos) > 0 else "",
+            'destinatario': ruts_unicos[1] if len(ruts_unicos) > 1 else "",
             'ruts_encontrados': ruts_unicos
         }
     
@@ -64,7 +65,7 @@ class FacturaExtractor:
             text (str): Texto extraído del PDF
             
         Returns:
-            str: Número de factura o None
+            int: Número de factura o 0 si no se encuentra
         """
         # Patrones comunes para número de factura (sin limitación de cifras)
         patterns = [
@@ -78,9 +79,9 @@ class FacturaExtractor:
             if match:
                 numero = match.group(1).strip()
                 if numero:
-                    return f"N°{numero}"
+                    return int(numero)
         
-        return None
+        return 0
     
     def extract_fecha_emision(self, text):
         """
@@ -91,21 +92,38 @@ class FacturaExtractor:
             text (str): Texto extraído del PDF
             
         Returns:
-            str: Fecha en formato original o None
+            date: Fecha como objeto date o date(1900, 1, 1) si no se encuentra
         """
+        meses_map = {
+            'enero': 1, 'febrero': 2, 'marzo': 3, 'abril': 4, 'mayo': 5, 'junio': 6,
+            'julio': 7, 'agosto': 8, 'septiembre': 9, 'octubre': 10, 'noviembre': 11, 'diciembre': 12
+        }
+        
         # Patrones para fecha de emisión
         patterns = [
-            r'[Ff]echa\s+[Ee]misio?n[:\s]+(\d{1,2}\s+de\s+\w+\s+del?\s+\d{4})',
-            r'[Ff]echa[:\s]+(\d{1,2}/\d{1,2}/\d{4})',
-            r'[Ee]mision[:\s]+(\d{1,2}\s+de\s+\w+\s+del?\s+\d{4})',
+            r'[Ff]echa\s+[Ee]misio?n[:\s]+(\d{1,2})\s+de\s+(\w+)\s+del?\s+(\d{4})',
+            r'[Ff]echa[:\s]+(\d{1,2})/(\d{1,2})/(\d{4})',
+            r'[Ee]mision[:\s]+(\d{1,2})\s+de\s+(\w+)\s+del?\s+(\d{4})',
         ]
         
         for pattern in patterns:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
-                return match.group(1).strip()
+                groups = match.groups()
+                try:
+                    if len(groups) == 3:
+                        dia, mes, año = groups
+                        # Si mes es palabra ("Julio"), convertir a número
+                        if mes.isdigit():
+                            mes_num = int(mes)
+                        else:
+                            mes_num = meses_map.get(mes.lower())
+                        if mes_num:
+                            return date(int(año), mes_num, int(dia))
+                except (ValueError, KeyError):
+                    continue
         
-        return None
+        return date(1900, 1, 1)
     
     def extract_empresa_emisora(self, text):
         """
@@ -116,7 +134,7 @@ class FacturaExtractor:
             text (str): Texto extraído del PDF
             
         Returns:
-            str: Nombre de la empresa o None
+            str: Nombre de la empresa o string vacío si no se encuentra
         """
         # Buscar línea con nombre de empresa (mayúsculas y palabras)
         # Patrón: RUT en primera línea, empresa en segunda línea
@@ -129,7 +147,7 @@ class FacturaExtractor:
             if empresa and len(empresa) > 2:
                 return empresa
         
-        return None
+        return ""
     
     def extract_empresa_destinataria(self, text):
         """
@@ -140,7 +158,7 @@ class FacturaExtractor:
             text (str): Texto extraído del PDF
             
         Returns:
-            str: Nombre de la empresa o None
+            str: Nombre de la empresa o string vacío si no se encuentra
         """
         # Buscar empresa destinataria - generalmente después de SENOR(ES):
         patterns = [
@@ -158,7 +176,7 @@ class FacturaExtractor:
                 if empresa and len(empresa) > 2:
                     return empresa
         
-        return None
+        return ""
     
     def extract_domicilios(self, text):
         """
@@ -172,7 +190,7 @@ class FacturaExtractor:
         Returns:
             dict: {'emisor': 'domicilio', 'destinatario': 'domicilio'}
         """
-        domicilios = {'emisor': None, 'destinatario': None}
+        domicilios = {'emisor': "", 'destinatario': ""}
         
         # Dividir en dos secciones: antes y después de SENOR(ES):
         senor_match = re.search(r'SENOR\s*\(?\s*ES\s*\)?', text, re.IGNORECASE)
@@ -217,11 +235,33 @@ class FacturaExtractor:
         Returns:
             str: Domicilio limpiado
         """
-        # Remover espacios múltiples
-        domicilio = re.sub(r'\s+', ' ', domicilio)
-        # Remover saltos de línea
-        domicilio = domicilio.replace('\n', ' ').strip()
+        domicilio = re.sub(r'\s+', ' ', domicilio) # Remover espacios múltiples
+        domicilio = domicilio.replace('\n', ' ').strip() # Remover saltos de línea
         return domicilio
+    
+    def _parse_monto(self, monto_str):
+        """
+        Convierte un string de monto en entero.
+        Maneja formatos como "123.456.789" o "123,456.789"
+        
+        Args:
+            monto_str (str): String del monto
+            
+        Returns:
+            int: Valor numérico o 0 si no se puede parsear
+        """
+        if not monto_str:
+            return 0
+        try:
+            # Remover espacios y $
+            monto_str = monto_str.replace('$', '').replace(' ', '').strip()
+            # Si usa puntos como separadores de miles (formato chileno)
+            monto_str = monto_str.replace('.', '')
+            # Convertir coma decimal a punto si existe
+            monto_str = monto_str.replace(',', '.')
+            return int(float(monto_str))
+        except (ValueError, AttributeError):
+            return 0
     
     def extract_montos(self, text):
         """
@@ -232,129 +272,66 @@ class FacturaExtractor:
             text (str): Texto extraído del PDF
             
         Returns:
-            dict: {'neto': 'valor', 'iva': 'valor', 'total': 'valor', 'impuesto_adicional': 'valor'}
+            dict: {'neto': int, 'iva': int, 'total': int, 'impuesto_adicional': int}
         """
-        montos = {'neto': None, 'iva': None, 'total': None, 'impuesto_adicional': None}
-        
-        # Patrón para encontrar montos ($ X.XXX.XXX o $X.XXX.XXX o $= X.XXX.XXX)
-        monto_pattern = r'\$\s*=?\s*([\d.,]+)'
+        montos = {'neto': 0, 'iva': 0, 'total': 0, 'impuesto_adicional': 0}
         
         # Buscar MONTO NETO
         neto_match = re.search(r'MONTO\s+NETO[:\s]*\$\s*=?\s*([\d.,]+)', text, re.IGNORECASE)
         if neto_match:
             neto_value = neto_match.group(1)
-            montos['neto'] = f"${neto_value}"
+            montos['neto'] = self._parse_monto(neto_value) or 0
         
         # Buscar IVA (puede ser "I.V.A.19%", "IVA 19%", etc.)
         iva_matches = re.findall(r'I\.?V\.?A\.?[:\s]*\d+%?\s*\$\s*=?\s*([\d.,]+)', text, re.IGNORECASE)
         if iva_matches:
             iva_value = iva_matches[0]
-            montos['iva'] = f"${iva_value}"
+            montos['iva'] = self._parse_monto(iva_value) or 0
         
         # Buscar TOTAL
         total_matches = re.findall(r'TOTAL[:\s]*\$\s*=?\s*([\d.,]+)', text, re.IGNORECASE)
         if total_matches:
-            montos['total'] = f"${total_matches[0]}"
+            montos['total'] = self._parse_monto(total_matches[0]) or 0
         else:
             # Calcular total si no se encuentra
-            if montos['neto'] and montos['iva']:
-                try:
-                    # Extraer números sin $ ni puntos
-                    neto_num = float(montos['neto'].replace('$', '').replace('.', '').replace(',', '.'))
-                    iva_num = float(montos['iva'].replace('$', '').replace('.', '').replace(',', '.'))
-                    total_num = neto_num + iva_num
-                    # Formatear con separadores
-                    total_str = f"{total_num:,.0f}".replace(',', '.')
-                    montos['total'] = f"${total_str}"
-                except:
-                    pass
+            if montos['neto'] > 0 or montos['iva'] > 0:
+                montos['total'] = montos['neto'] + montos['iva']
         
         # Buscar IMPUESTO ADICIONAL
         impuesto_matches = re.findall(r'IMPUESTO\s+ADICIONAL[:\s]*\$\s*=?\s*([\d.,]+)', text, re.IGNORECASE)
         if impuesto_matches:
-            imp_value = impuesto_matches[0]
-            # Solo mostrar si es mayor a 0
-            if imp_value not in ['0', '0.', '0,']:
-                montos['impuesto_adicional'] = f"${imp_value}"
+            imp_value = self._parse_monto(impuesto_matches[0])
+            # Solo asignar si es mayor a 0
+            if imp_value and imp_value > 0:
+                montos['impuesto_adicional'] = imp_value
         
         return montos
     
     def extract_all(self, text):
         """
-        Extrae todos los campos de una factura.
+        Extrae todos los campos de una factura y retorna una instancia de Factura.
         
         Args:
             text (str): Texto extraído del PDF
             
         Returns:
-            dict: Diccionario con todos los campos extraídos
+            Factura: Instancia de Factura con todos los campos extraídos
         """
         ruts = self.extract_ruts(text)
         domicilios = self.extract_domicilios(text)
         montos = self.extract_montos(text)
         
-        factura = {
-            'numero_factura': self.extract_numero_factura(text),
-            'fecha_emision': self.extract_fecha_emision(text),
-            'empresa_emisora': self.extract_empresa_emisora(text),
-            'empresa_destinataria': self.extract_empresa_destinataria(text),
-            'rut_emisor': ruts['emisor'],
-            'rut_destinatario': ruts['destinatario'],
-            'domicilio_emisor': domicilios['emisor'],
-            'domicilio_destinatario': domicilios['destinatario'],
-            'monto_neto': montos['neto'],
-            'iva': montos['iva'],
-            'total': montos['total'],
-            'impuesto_adicional': montos['impuesto_adicional'],
-        }
-        
-        return factura
-    
-    def format_factura(self, factura):
-        """
-        Formatea la factura extraída de forma legible.
-        
-        Args:
-            factura (dict): Diccionario con datos de la factura
-            
-        Returns:
-            str: Texto formateado
-        """
-        output = []
-        output.append("=" * 80)
-        output.append("DATOS EXTRAÍDOS DE LA FACTURA")
-        output.append("=" * 80)
-        
-        # Encabezado
-        output.append(f"\nNúmero de Factura: {factura['numero_factura'] or '[No detectado]'}")
-        output.append(f"Fecha de Emisión: {factura['fecha_emision'] or '[No detectado]'}")
-        
-        # Empresa Emisora
-        output.append("\n" + "-" * 80)
-        output.append("EMPRESA EMISORA")
-        output.append("-" * 80)
-        output.append(f"  Nombre: {factura['empresa_emisora'] or '[No detectado]'}")
-        output.append(f"  RUT: {factura['rut_emisor'] or '[No detectado]'}")
-        output.append(f"  Domicilio: {factura['domicilio_emisor'] or '[No detectado]'}")
-        
-        # Empresa Destinataria
-        output.append("\n" + "-" * 80)
-        output.append("EMPRESA DESTINATARIA")
-        output.append("-" * 80)
-        output.append(f"  Nombre: {factura['empresa_destinataria'] or '[No detectado]'}")
-        output.append(f"  RUT: {factura['rut_destinatario'] or '[No detectado]'}")
-        output.append(f"  Domicilio: {factura['domicilio_destinatario'] or '[No detectado]'}")
-        
-        # Montos
-        output.append("\n" + "-" * 80)
-        output.append("MONTOS")
-        output.append("-" * 80)
-        output.append(f"  Monto Neto: {factura['monto_neto'] or '[No detectado]'}")
-        output.append(f"  IVA (19%): {factura['iva'] or '[No detectado]'}")
-        if factura['impuesto_adicional']:
-            output.append(f"  Impuesto Adicional: {factura['impuesto_adicional']}")
-        output.append(f"  TOTAL: {factura['total'] or '[No detectado]'}")
-        
-        output.append("\n" + "=" * 80)
-        
-        return "\n".join(output)
+        return Factura(
+            numero_factura=self.extract_numero_factura(text),
+            fecha_emision=self.extract_fecha_emision(text),
+            empresa_emisora=self.extract_empresa_emisora(text),
+            empresa_destinataria=self.extract_empresa_destinataria(text),
+            rut_emisor=ruts['emisor'],
+            rut_destinatario=ruts['destinatario'],
+            domicilio_emisor=domicilios['emisor'],
+            domicilio_destinatario=domicilios['destinatario'],
+            monto_neto=montos['neto'],
+            iva=montos['iva'],
+            total=montos['total'],
+            impuesto_adicional=montos['impuesto_adicional'],
+        )

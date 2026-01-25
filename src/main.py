@@ -42,11 +42,11 @@ def main():
             print(extracted_text)
             print()
             
-            # Extraer campos inteligentemente
-            factura_datos = extractor.extract_all(extracted_text)
+            # Extraer campos inteligentemente (ahora retorna una instancia de Factura)
+            factura = extractor.extract_all(extracted_text)
             
-            # Mostrar datos extraídos
-            print(extractor.format_factura(factura_datos))
+            # Mostrar datos extraídos (usa el método __str__ de Factura)
+            print(str(factura))
             print("\n" + "=" * 80 + "\n")
             
         except Exception as e:

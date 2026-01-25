@@ -8,7 +8,6 @@ HF_TOKEN = os.getenv("HUGGINGFACE_TOKEN")
 # if not HF_TOKEN:
 #     raise ValueError("HUGGINGFACE_TOKEN no encontrado en .env. Crea uno en huggingface.co/settings/tokens.")
 
-
 class FacturaExtractor:
     """
     Extractor inteligente de campos en facturas chilenas.
@@ -36,7 +35,12 @@ class FacturaExtractor:
         ruts = re.findall(self.rut_pattern, text, re.IGNORECASE)
         
         # Normalizar RUT (remover espacios extra después del guión)
-        ruts_limpios = [self._normalize_rut(rut) for rut in ruts]
+        ruts_limpios = []
+        
+        for rut in ruts:
+            rut = re.sub(r'\s*-\s*', '-', rut) # Remover espacios alrededor del guión
+            rut = rut.upper() # Convertir a mayúsculas (K de verificador)
+            ruts_limpios.append(rut)
         
         # Eliminar duplicados manteniendo orden
         ruts_unicos = []
@@ -50,26 +54,11 @@ class FacturaExtractor:
             'ruts_encontrados': ruts_unicos
         }
     
-    def _normalize_rut(self, rut):
-        """
-        Normaliza un RUT removiendo espacios adicionales.
-        
-        Args:
-            rut (str): RUT a normalizar (puede tener espacios)
-            
-        Returns:
-            str: RUT normalizado
-        """
-        # Remover espacios alrededor del guión
-        rut = re.sub(r'\s*-\s*', '-', rut)
-        # Convertir a mayúsculas (K de verificador)
-        rut = rut.upper()
-        return rut
-    
     def extract_numero_factura(self, text):
         """
         Extrae el número de factura.
         Busca patrones como "N°XXX", "N° XXX", "FACTURA N° XXX", etc.
+        Soporta números de factura con cualquier cantidad de cifras.
         
         Args:
             text (str): Texto extraído del PDF
@@ -77,20 +66,19 @@ class FacturaExtractor:
         Returns:
             str: Número de factura o None
         """
-        # Patrones comunes para número de factura
+        # Patrones comunes para número de factura (sin limitación de cifras)
         patterns = [
-            r'(?:FACTURA\s+)?[Nn]°\s*(\d+)',  # N° 183
-            r'(?:^|[\s])([Nn]°\s*\d+)',        # N° 338
-            r'Factura.*?[Nn]°\s*(\d+)',        # Factura N°XXX
+            r'FACTURA\s+[Nn]°\s*(\d+)',       # FACTURA N° XXX
+            r'(?:^|[\s])[Nn]°\s*(\d+)',       # N° XXX (inicio o después de espacio)
+            r'[Nn]úmero\s+(?:de\s+)?Factura[:\s]*(\d+)',  # Número de Factura: XXX
         ]
         
         for pattern in patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
+            match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
             if match:
-                # Extraer solo el número
-                numero = re.search(r'\d+', match.group(1) if match.groups() else match.group())
+                numero = match.group(1).strip()
                 if numero:
-                    return f"N°{numero.group()}"
+                    return f"N°{numero}"
         
         return None
     
@@ -131,7 +119,6 @@ class FacturaExtractor:
             str: Nombre de la empresa o None
         """
         # Buscar línea con nombre de empresa (mayúsculas y palabras)
-        # Generalmente: SPA, S.A., S.L., etc. o nombres con varias palabras en mayúsculas
         # Patrón: RUT en primera línea, empresa en segunda línea
         matches = re.search(r'^R\.?U\.?T.*?\n+\s*([A-Z][A-Z\s\.]+?)(?:\n)', text, re.MULTILINE | re.DOTALL)
         
@@ -158,6 +145,7 @@ class FacturaExtractor:
         # Buscar empresa destinataria - generalmente después de SENOR(ES):
         patterns = [
             r'SENOR\s*\(?\s*ES\s*\)?\s*[:\s]+([A-Z][A-Z\s\.]+?)(?:\n|R\.U\.T)',
+            r'SEÑOR\s*\(?\s*ES\s*\)?\s*[:\s]+([A-Z][A-Z\s\.]+?)(?:\n|R\.U\.T)',
             r'CLIENTE[:\s]+([A-Z][A-Z\s\.]+?)(?:\n|R\.U\.T)',
         ]
         
@@ -234,37 +222,6 @@ class FacturaExtractor:
         # Remover saltos de línea
         domicilio = domicilio.replace('\n', ' ').strip()
         return domicilio
-    
-    def extract_descripcion_operaciones(self, text):
-        """
-        Extrae la descripción de operaciones/servicios.
-        Busca la línea de descripción del producto o servicio.
-        
-        Args:
-            text (str): Texto extraído del PDF
-            
-        Returns:
-            str: Descripción de operaciones o None
-        """
-        # Buscar descripción entre líneas de detalle
-        patterns = [
-            # Buscar líneas que comiencen con "Estado de Pago" u "EPN°" y capturar la descripción
-            r'(?:Estado de Pago n°|EPN°)[^\n]*\n(?:\s*[A-Z][^\n]*\n)*\s*([A-Z][A-Za-z\s\.áéíóúñ]+?)(?:\n\s*-|\n\s*MONTO|\n\s*IMPUESTO|$)',
-            # Alternativa: buscar en la sección de "Descripcion Cantidad"
-            r'(?:Estado de Pago|EPN°)[^\n]*\s+(.+?)(?:\nObras|$)',
-        ]
-        
-        for pattern in patterns:
-            match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE | re.DOTALL)
-            if match:
-                descripcion = match.group(1).strip()
-                # Limpiar: remover números de cantidad, etc.
-                descripcion = re.sub(r'\s*un\s+\d+', '', descripcion)
-                descripcion = re.sub(r'\s+', ' ', descripcion)
-                if len(descripcion) > 3:
-                    return descripcion
-        
-        return None
     
     def extract_montos(self, text):
         """
@@ -345,7 +302,6 @@ class FacturaExtractor:
             'rut_destinatario': ruts['destinatario'],
             'domicilio_emisor': domicilios['emisor'],
             'domicilio_destinatario': domicilios['destinatario'],
-            'descripcion_operaciones': self.extract_descripcion_operaciones(text),
             'monto_neto': montos['neto'],
             'iva': montos['iva'],
             'total': montos['total'],
@@ -388,12 +344,6 @@ class FacturaExtractor:
         output.append(f"  Nombre: {factura['empresa_destinataria'] or '[No detectado]'}")
         output.append(f"  RUT: {factura['rut_destinatario'] or '[No detectado]'}")
         output.append(f"  Domicilio: {factura['domicilio_destinatario'] or '[No detectado]'}")
-        
-        # Descripción de Operaciones
-        output.append("\n" + "-" * 80)
-        output.append("DESCRIPCIÓN DE OPERACIONES")
-        output.append("-" * 80)
-        output.append(f"{factura['descripcion_operaciones'] or '[No detectado]'}")
         
         # Montos
         output.append("\n" + "-" * 80)

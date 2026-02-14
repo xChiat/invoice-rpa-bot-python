@@ -3,6 +3,7 @@ import re
 from dotenv import load_dotenv
 from datetime import date
 from factura import Factura
+from tipo_factura import TipoFactura
 
 load_dotenv()
 HF_TOKEN = os.getenv("HUGGINGFACE_TOKEN")
@@ -307,12 +308,13 @@ class FacturaExtractor:
         
         return montos
     
-    def extract_all(self, text):
+    def extract_all(self, text, tipo_factura=None):
         """
         Extrae todos los campos de una factura y retorna una instancia de Factura.
         
         Args:
             text (str): Texto extraído del PDF
+            tipo_factura (TipoFactura, optional): Tipo de factura (escaneada o digital)
             
         Returns:
             Factura: Instancia de Factura con todos los campos extraídos
@@ -320,6 +322,10 @@ class FacturaExtractor:
         ruts = self.extract_ruts(text)
         domicilios = self.extract_domicilios(text)
         montos = self.extract_montos(text)
+        
+        # Si no se proporciona tipo_factura, usar uno por defecto
+        if tipo_factura is None:
+            tipo_factura = TipoFactura()
         
         return Factura(
             numero_factura=self.extract_numero_factura(text),
@@ -334,4 +340,5 @@ class FacturaExtractor:
             iva=montos['iva'],
             total=montos['total'],
             impuesto_adicional=montos['impuesto_adicional'],
+            tipo_factura=tipo_factura,
         )

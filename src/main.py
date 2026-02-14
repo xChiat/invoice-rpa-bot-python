@@ -1,6 +1,7 @@
 from pathlib import Path
-from extraction import extract_text_from_pdf
+from extraction import extract_text_from_pdf, is_scanned_pdf
 from ai_extraction import FacturaExtractor
+from tipo_factura import TipoFactura
 
 
 def main():
@@ -35,6 +36,18 @@ def main():
         print("=" * 80)
         
         try:
+            # Detectar tipo de factura (escaneada o digital)
+            es_escaneada = is_scanned_pdf(str(pdf_path))
+            
+            if es_escaneada:
+                tipo_factura = TipoFactura(id_tipo=1, tipo_factura="Escaneada")
+                print("✓ Tipo detectado: Factura ESCANEADA (usando OCR)")
+            else:
+                tipo_factura = TipoFactura(id_tipo=2, tipo_factura="Digital")
+                print("✓ Tipo detectado: Factura DIGITAL (extracción directa)")
+            
+            print()
+            
             # Extraer texto del PDF
             extracted_text = extract_text_from_pdf(str(pdf_path))
             
@@ -43,7 +56,7 @@ def main():
             print()
             
             # Extraer campos inteligentemente (ahora retorna una instancia de Factura)
-            factura = extractor.extract_all(extracted_text)
+            factura = extractor.extract_all(extracted_text, tipo_factura=tipo_factura)
             
             # Mostrar datos extraídos (usa el método __str__ de Factura)
             print(str(factura))

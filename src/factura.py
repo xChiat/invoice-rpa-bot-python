@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import date
+from tipo_factura import TipoFactura
 
 
 @dataclass
@@ -22,6 +23,7 @@ class Factura:
     iva: int = 0
     total: int = 0
     impuesto_adicional: int = 0
+    tipo_factura: TipoFactura = field(default_factory=TipoFactura)
     
     def __str__(self) -> str:
         """
@@ -34,6 +36,10 @@ class Factura:
         output.append("=" * 80)
         output.append("DATOS EXTRAÍDOS DE LA FACTURA")
         output.append("=" * 80)
+        
+        # Tipo de factura
+        if self.tipo_factura and self.tipo_factura.tipo_factura:
+            output.append(f"\nTipo de Factura: {self.tipo_factura.tipo_factura}")
         
         # Encabezado
         numero_str = f"N°{self.numero_factura}" if self.numero_factura > 0 else "[No detectado]"

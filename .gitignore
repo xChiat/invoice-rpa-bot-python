@@ -178,3 +178,51 @@ log.md
 
 # End of https://www.toptal.com/developers/gitignore/api/python
 /scanned-pdf-text-extractor
+
+# ===== Backend Specific =====
+
+# Database
+*.db
+*.sqlite
+
+# Uploads y archivos temporales
+data/pdfs/
+data/input/*.pdf
+data/output/*.txt
+_temp_images/
+uploads/
+
+# Alembic versionado (mantener estructura pero no versiones específicas)
+# backend/alembic/versions/*.py
+# Descomentar si quieres versionar migraciones
+
+# Logs del backend
+logs/*.log
+backend/logs/*.log
+
+# Archivos de configuración local
+.env.local
+.env.*.local
+
+# IDE - VSCode
+.vscode/
+*.code-workspace
+
+# IDE - PyCharm
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Build artifacts
+*.egg-info/
+dist/
+build/
+

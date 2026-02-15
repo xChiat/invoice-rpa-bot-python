@@ -1,0 +1,63 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Documentation
+*.md
+docs/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Local data
+backend/data/input/*
+backend/data/output/*
+*.pdf
+*.txt
+
+# Node (si usas)
+node_modules/
+package-lock.json
+yarn.lock
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Railway/Docker
+.dockerignore
+docker-compose.yml
+
+# Scripts de desarrollo
+init_backend.py
+scripts/
+tests/

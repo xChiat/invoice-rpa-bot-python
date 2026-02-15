@@ -226,3 +226,5 @@ htmlcov/
 dist/
 build/
 
+# distintos md
+RAILWAY_DEPLOY.md

@@ -20,7 +20,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 # Copiar código de la aplicación
 COPY backend/ /app/backend/
-COPY src/ /app/src/
+COPY alembic.ini /app/
+COPY init_backend.py /app/
 
 # Crear directorio para datos temporales
 RUN mkdir -p /app/data/pdfs
@@ -37,5 +38,17 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # Exponer puerto (Railway usa PORT dinámico)
 EXPOSE ${PORT}
 
+# Script de inicio que ejecuta migraciones antes de iniciar
+COPY <<'EOF' /app/start.sh
+#!/bin/bash
+set -e
+echo "Running database migrations..."
+alembic upgrade head || echo "Migration failed or not needed"
+echo "Starting application..."
+exec uvicorn backend.api.main:app --host 0.0.0.0 --port ${PORT}
+EOF
+
+RUN chmod +x /app/start.sh
+
 # Comando para iniciar la aplicación
-CMD uvicorn backend.api.main:app --host 0.0.0.0 --port ${PORT}
+CMD ["/app/start.sh"]

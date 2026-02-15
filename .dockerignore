@@ -24,10 +24,6 @@ build/
 htmlcov/
 .tox/
 
-# Documentation
-*.md
-docs/
-
 # Git
 .git/
 .gitignore
@@ -42,7 +38,6 @@ docs/
 backend/data/input/*
 backend/data/output/*
 *.pdf
-*.txt
 
 # Node (si usas)
 node_modules/
@@ -57,7 +52,8 @@ Thumbs.db
 .dockerignore
 docker-compose.yml
 
-# Scripts de desarrollo
+# Scripts de desarrollo (solo raíz)
 init_backend.py
-scripts/
 tests/
+README*.md
+RAILWAY*.md

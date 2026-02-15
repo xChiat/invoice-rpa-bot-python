@@ -31,7 +31,8 @@ class Settings(BaseSettings):
     cloudinary_api_key: str = ""
     cloudinary_api_secret: str = ""
     
-    # CORS (frontend URL)
+    # CORS (frontend URLs - separadas por comas)
+    # Ejemplo: "https://app.vercel.app,http://localhost:3000"
     frontend_url: str = "http://localhost:3000"
     
     # Sentry (monitoreo de errores - opcional)
@@ -53,12 +54,23 @@ class Settings(BaseSettings):
     
     @property
     def cors_origins(self) -> list:
-        """Lista de orígenes permitidos para CORS"""
-        return [
-            self.frontend_url,
-            "http://localhost:3000",  # Dev local
+        """
+        Lista de orígenes permitidos para CORS.
+        Soporta múltiples URLs separadas por comas en FRONTEND_URL.
+        """
+        # Parsear URLs separadas por comas
+        urls = [url.strip() for url in self.frontend_url.split(",")]
+        
+        # Agregar localhost para desarrollo local
+        default_locals = [
+            "http://localhost:3000",  # React/Next.js default
             "http://localhost:5173",  # Vite default
+            "http://localhost:8080",  # Vue default
         ]
+        
+        # Combinar y remover duplicados
+        all_origins = list(set(urls + default_locals))
+        return all_origins
 
 
 # Instancia global de configuración

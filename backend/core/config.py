@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     
     # CORS (frontend URLs - separadas por comas)
     # Ejemplo: "https://app.vercel.app,http://localhost:3000"
-    frontend_url: str = "http://localhost:3000"
+    frontend_url: str = "https://invoice-rpa-bot-frontend-nerivyw26-xchiats-projects.vercel.app"
     
     # Sentry (monitoreo de errores - opcional)
     sentry_dsn: Optional[str] = None

@@ -27,7 +27,12 @@ logging.basicConfig(
     force=True  # Forzar reconfiguración si ya existe
 )
 logger = logging.getLogger(__name__)
+logger.info("="*80)
 logger.info(f"Logging configured at {settings.log_level.upper()} level")
+logger.info(f"DEBUG mode: {settings.debug}")
+logger.info(f"Frontend URL from config: {settings.frontend_url}")
+logger.info(f"CORS origins that will be configured: {settings.cors_origins}")
+logger.info("="*80)
 
 # Crear aplicación FastAPI
 app = FastAPI(
@@ -43,17 +48,24 @@ app = FastAPI(
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     """Log detallado de todas las requests entrantes"""
-    logger.info(f"\n{'='*80}")
-    logger.info(f"INCOMING REQUEST: {request.method} {request.url.path}")
+    logger.info("="*80)
+    logger.info(f"🔵 INCOMING REQUEST: {request.method} {request.url.path}")
     logger.info(f"Client: {request.client.host if request.client else 'Unknown'}")
-    logger.info(f"Headers: {dict(request.headers)}")
+    logger.info(f"Origin header: {request.headers.get('origin', 'NO ORIGIN')}")
+    logger.info(f"All headers: {dict(request.headers)}")
     logger.info(f"Query params: {dict(request.query_params)}")
+    
+    # Special handling for OPTIONS
+    if request.method == "OPTIONS":
+        logger.warning(f"⚠️  OPTIONS (CORS Preflight) request detected")
+        logger.info(f"Access-Control-Request-Method: {request.headers.get('access-control-request-method', 'NONE')}")
+        logger.info(f"Access-Control-Request-Headers: {request.headers.get('access-control-request-headers', 'NONE')}")
     
     # Log body para POST/PUT/PATCH
     if request.method in ["POST", "PUT", "PATCH"]:
         try:
             body = await request.body()
-            logger.info(f"Body (raw): {body.decode('utf-8')}")
+            logger.info(f"Body (raw): {body.decode('utf-8') if body else 'EMPTY'}")
             # Rehacer el body para que esté disponible para el endpoint
             async def receive():
                 return {"type": "http.request", "body": body}
@@ -64,24 +76,40 @@ async def log_requests(request: Request, call_next):
     # Procesar request
     try:
         response = await call_next(request)
-        logger.info(f"Response status: {response.status_code}")
-        logger.info(f"{'='*80}\n")
+        
+        if request.method == "OPTIONS":
+            logger.info(f"🟢 OPTIONS Response status: {response.status_code}")
+            # Log CORS headers in response
+            logger.info("Response CORS headers:")
+            for key in ['access-control-allow-origin', 'access-control-allow-methods', 
+                       'access-control-allow-headers', 'access-control-allow-credentials']:
+                value = response.headers.get(key, 'NOT SET')
+                logger.info(f"  {key}: {value}")
+        else:
+            logger.info(f"Response status: {response.status_code}")
+        
+        logger.info("="*80)
         return response
     except Exception as e:
-        logger.error(f"Request failed with exception: {e}", exc_info=True)
-        logger.info(f"{'='*80}\n")
+        logger.error(f"❌ Request failed with exception: {e}", exc_info=True)
+        logger.info("="*80)
         raise
 
 # Configurar CORS
-logger.info(f"Configuring CORS with origins: {settings.cors_origins}")
+logger.info("Configuring CORS middleware...")
+logger.info(f"Allowed origins: {settings.cors_origins}")
+
+# Usar allow_origin_regex como fallback si hay problemas con origins específicos
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=["*"] if settings.debug else settings.cors_origins,  # Allow all en debug
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
-    expose_headers=["*"]
+    expose_headers=["*"],
+    max_age=3600  # Cache preflight requests for 1 hour
 )
+logger.info("✅ CORS middleware configured")
 
 
 # Manejadores de errores globales

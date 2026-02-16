@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     
     # CORS (frontend URLs - separadas por comas)
     # Ejemplo: "https://app.vercel.app,http://localhost:3000"
-    frontend_url: str = "https://invoice-rpa-bot-frontend-nerivyw26-xchiats-projects.vercel.app"
+    frontend_url: str = "https://invoice-rpa-bot-frontend-xchiats-projects.vercel.app"
     
     # Sentry (monitoreo de errores - opcional)
     sentry_dsn: Optional[str] = None
@@ -59,18 +59,34 @@ class Settings(BaseSettings):
         Lista de orígenes permitidos para CORS.
         Soporta múltiples URLs separadas por comas en FRONTEND_URL.
         """
+        # En modo debug, permitir cualquier origen
+        if self.debug:
+            return ["*"]
+        
         # Parsear URLs separadas por comas
-        urls = [url.strip() for url in self.frontend_url.split(",")]
+        urls = [url.strip() for url in self.frontend_url.split(",") if url.strip()]
         
         # Agregar localhost para desarrollo local
         default_locals = [
             "http://localhost:3000",  # React/Next.js default
             "http://localhost:5173",  # Vite default
             "http://localhost:8080",  # Vue default
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:5173",
         ]
         
         # Combinar y remover duplicados
         all_origins = list(set(urls + default_locals))
+        
+        # Log de advertencia si detectamos URL de Vercel con hash (deployment preview)
+        for url in urls:
+            if ".vercel.app" in url and "-" in url.split("//")[-1].split(".")[0]:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"⚠️  Detected Vercel preview URL with hash: {url}")
+                logger.warning("⚠️  This URL changes with each deployment!")
+                logger.warning("⚠️  Use production URL instead: https://your-app.vercel.app")
+        
         return all_origins
 
 

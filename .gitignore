@@ -229,3 +229,4 @@ build/
 # distintos md
 RAILWAY_DEPLOY.md
 RAILWAY_VERCEL_SETUP.md
+DEBUGGING_GUIDE.md

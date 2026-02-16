@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     app_name: str = "Invoice RPA Bot"
     app_version: str = "1.0.0"
     debug: bool = False
+    log_level: str = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
     
     # Database (Railway/Render proveen DATABASE_URL automáticamente)
     database_url: str

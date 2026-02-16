@@ -44,9 +44,16 @@ async def register(
     4. Crear usuario admin
     5. Retornar tokens
     """
+    logger.info(f"Attempting to register new user/company")
+    logger.info(f"Email: {user_data.email}")
+    logger.info(f"Full name: {user_data.full_name}")
+    logger.info(f"Company name: {user_data.empresa_nombre}")
+    logger.info(f"Company RUT: {user_data.empresa_rut}")
+    
     # Verificar si email ya existe
     existing_user = db.query(User).filter(User.email == user_data.email).first()
     if existing_user:
+        logger.warning(f"Registration failed: Email {user_data.email} already exists")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered"
@@ -55,6 +62,7 @@ async def register(
     # Verificar si empresa ya existe
     existing_empresa = db.query(Empresa).filter(Empresa.rut == user_data.empresa_rut).first()
     if existing_empresa:
+        logger.warning(f"Registration failed: Company RUT {user_data.empresa_rut} already exists")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Company RUT already registered"
@@ -62,6 +70,7 @@ async def register(
     
     try:
         # Crear empresa
+        logger.info("Creating new company...")
         empresa = Empresa(
             nombre=user_data.empresa_nombre,
             rut=user_data.empresa_rut,
@@ -69,8 +78,10 @@ async def register(
         )
         db.add(empresa)
         db.flush()  # Para obtener el ID sin hacer commit
+        logger.info(f"Company created with ID: {empresa.id}")
         
         # Crear usuario administrador
+        logger.info("Creating admin user...")
         user = User(
             email=user_data.email,
             hashed_password=hash_password(user_data.password),
@@ -81,10 +92,12 @@ async def register(
         db.add(user)
         db.commit()
         db.refresh(user)
+        logger.info(f"User created with ID: {user.id}")
         
-        logger.info(f"New company and admin user registered: {user.email} (empresa_id: {empresa.id})")
+        logger.info(f"✓ Registration successful: {user.email} (empresa_id: {empresa.id})")
         
         # Crear tokens
+        logger.info("Generating authentication tokens...")
         token_data = {
             "user_id": user.id,
             "empresa_id": user.empresa_id,
@@ -93,18 +106,22 @@ async def register(
         access_token = create_access_token(token_data)
         refresh_token = create_refresh_token(token_data)
         
+        logger.info("Registration completed successfully")
         return Token(
             access_token=access_token,
             refresh_token=refresh_token,
             token_type="bearer"
         )
         
+    except HTTPException:
+        # Re-lanzar HTTPException sin modificar
+        raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error registering user: {e}")
+        logger.error(f"✗ Database error during registration: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error creating user account"
+            detail=f"Error creating user account: {str(e)}"
         )
 
 

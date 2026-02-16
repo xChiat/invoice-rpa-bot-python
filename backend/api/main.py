@@ -20,11 +20,14 @@ from backend.models.database.models import (
 )
 
 # Configurar logging
+log_level = getattr(logging, settings.log_level.upper(), logging.INFO)
 logging.basicConfig(
-    level=logging.INFO if not settings.debug else logging.DEBUG,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=log_level,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    force=True  # Forzar reconfiguración si ya existe
 )
 logger = logging.getLogger(__name__)
+logger.info(f"Logging configured at {settings.log_level.upper()} level")
 
 # Crear aplicación FastAPI
 app = FastAPI(
@@ -36,7 +39,41 @@ app = FastAPI(
     openapi_url="/api/openapi.json"
 )
 
+# Middleware de logging para todas las requests
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log detallado de todas las requests entrantes"""
+    logger.info(f"\n{'='*80}")
+    logger.info(f"INCOMING REQUEST: {request.method} {request.url.path}")
+    logger.info(f"Client: {request.client.host if request.client else 'Unknown'}")
+    logger.info(f"Headers: {dict(request.headers)}")
+    logger.info(f"Query params: {dict(request.query_params)}")
+    
+    # Log body para POST/PUT/PATCH
+    if request.method in ["POST", "PUT", "PATCH"]:
+        try:
+            body = await request.body()
+            logger.info(f"Body (raw): {body.decode('utf-8')}")
+            # Rehacer el body para que esté disponible para el endpoint
+            async def receive():
+                return {"type": "http.request", "body": body}
+            request._receive = receive
+        except Exception as e:
+            logger.error(f"Error reading body: {e}")
+    
+    # Procesar request
+    try:
+        response = await call_next(request)
+        logger.info(f"Response status: {response.status_code}")
+        logger.info(f"{'='*80}\n")
+        return response
+    except Exception as e:
+        logger.error(f"Request failed with exception: {e}", exc_info=True)
+        logger.info(f"{'='*80}\n")
+        raise
+
 # Configurar CORS
+logger.info(f"Configuring CORS with origins: {settings.cors_origins}")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -51,6 +88,12 @@ app.add_middleware(
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """Manejar errores de validación de Pydantic"""
+    logger.error(f"\n{'='*80}")
+    logger.error(f"VALIDATION ERROR on {request.method} {request.url.path}")
+    logger.error(f"Errors: {exc.errors()}")
+    logger.error(f"Body received: {exc.body}")
+    logger.error(f"{'='*80}\n")
+    
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
@@ -102,6 +145,17 @@ async def health_check():
     }
 
 
+@app.get("/debug/cors", tags=["Debug"])
+async def debug_cors(request: Request):
+    """Endpoint de diagnóstico CORS - muestra configuración y headers"""
+    return {
+        "allowed_origins": settings.cors_origins,
+        "request_origin": request.headers.get("origin"),
+        "request_headers": dict(request.headers),
+        "cors_configured": True
+    }
+
+
 @app.get("/", tags=["Root"])
 async def root():
     """Endpoint raíz con información de la API"""
@@ -119,6 +173,9 @@ async def startup_event():
     """Acciones al iniciar la aplicación"""
     logger.info(f"Starting {settings.app_name} v{settings.app_version}")
     logger.info(f"Debug mode: {settings.debug}")
+    logger.info(f"Environment: {'development' if settings.debug else 'production'}")
+    logger.info(f"Logging level: {logging.getLogger().level} ({logging.getLevelName(logging.getLogger().level)})")
+    logger.info(f"CORS origins configured: {settings.cors_origins}")
     logger.info(f"Database URL: {settings.database_url.split('@')[-1]}")  # Log sin credenciales
     
     # Inicializar Sentry si está configurado
